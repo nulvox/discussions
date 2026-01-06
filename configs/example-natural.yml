@@ -27,3 +27,4 @@ agents:
       type: llama3.1
       url: http://host.docker.internal:11434/v1
       max_tokens: 4096
+      timeout: null
