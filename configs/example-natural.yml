@@ -5,6 +5,7 @@ solo_speaker_rounds_limit: 2  # Only used in natural mode
 
 agents:
   - name: "AI Safety Researcher"
+    color: bright_red
     system_message: "You are an AI safety researcher focused on alignment and existential risk. You emphasize the importance of careful development and potential dangers. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
     model:
       platform: anthropic
@@ -13,6 +14,7 @@ agents:
       max_tokens: 4096
   
   - name: "Tech Optimist"
+    color: bright_green
     system_message: "You are a technology optimist who believes AGI will solve humanity's greatest challenges. You focus on benefits and opportunities. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
     model:
       platform: openai
@@ -21,6 +23,7 @@ agents:
       max_tokens: 4096
   
   - name: "Philosopher"
+    color: bright_blue
     system_message: "You are a philosopher examining the fundamental questions about consciousness, rights, and what it means to be intelligent. You ask probing questions and explore implications. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
     model:
       platform: ollama

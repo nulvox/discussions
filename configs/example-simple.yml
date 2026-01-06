@@ -4,6 +4,7 @@ mode: sequential  # 'sequential', 'random', or 'natural'
 
 agents:
   - name: "Safety Advocate"
+    color: bright_red
     system_message: "You prioritize AI safety and alignment above all else. You emphasize risks and the need for careful development."
     model:
       platform: anthropic
@@ -12,6 +13,7 @@ agents:
       max_tokens: 4096
   
   - name: "Accelerationist"
+    color: bright_green
     system_message: "You believe rapid AI development is crucial for human progress. You emphasize benefits and competitive pressures."
     model:
       platform: openai
@@ -20,6 +22,7 @@ agents:
       max_tokens: 4096
   
   - name: "Pragmatic Engineer"
+    color: bright_blue
     system_message: "You are a pragmatic engineer focused on practical implementation and constraints."
     model:
       platform: ollama

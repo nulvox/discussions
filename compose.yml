@@ -1,15 +1,14 @@
-version: '3.8'
-
 services:
   discussion:
     build: .
     volumes:
       - ./configs:/app/configs:ro
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
       # Uncomment to use a specific config file (default: example-simple.yml)
-      # - CONFIG_PATH=/app/configs/example-natural.yml
+      - CONFIG_PATH=/app/configs/local-test.yml
+    tty: true
     # Uncomment below to enable local networking to reach ollama running on the hostOS  
     extra_hosts:
       - "host.docker.internal:host-gateway"

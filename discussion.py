@@ -3,6 +3,7 @@ import yaml
 import random
 import os
 import logging
+import sys
 from camel.agents import ChatAgent
 from camel.messages import BaseMessage
 from camel.models import ModelFactory
@@ -11,6 +12,62 @@ from camel.types import ModelPlatformType
 # Suppress camel-ai warnings
 logging.getLogger('camel').setLevel(logging.ERROR)
 logging.getLogger('root').setLevel(logging.ERROR)
+
+# ANSI color codes
+COLORS = {
+    'black': '\033[30m',
+    'red': '\033[31m',
+    'green': '\033[32m',
+    'yellow': '\033[33m',
+    'blue': '\033[34m',
+    'magenta': '\033[35m',
+    'cyan': '\033[36m',
+    'white': '\033[37m',
+    'bright_black': '\033[90m',
+    'bright_red': '\033[91m',
+    'bright_green': '\033[92m',
+    'bright_yellow': '\033[93m',
+    'bright_blue': '\033[94m',
+    'bright_magenta': '\033[95m',
+    'bright_cyan': '\033[96m',
+    'bright_white': '\033[97m',
+    'reset': '\033[0m'
+}
+
+def supports_color():
+    """
+    Check if the terminal supports color output
+    """
+    # Check if stdout is a TTY
+    if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
+        return False
+    
+    # Check TERM environment variable
+    term = os.environ.get('TERM', '')
+    if term == 'dumb':
+        return False
+    
+    # Check for color support indicators
+    if 'color' in term or term in ['xterm', 'xterm-256color', 'screen', 'screen-256color', 'linux']:
+        return True
+    
+    # Check COLORTERM
+    if os.environ.get('COLORTERM'):
+        return True
+    
+    return False
+
+def colorize(text, color):
+    """Apply color to text if colors are supported"""
+    if not supports_color():
+        return text
+    
+    color_code = COLORS.get(color.lower(), '')
+    reset_code = COLORS['reset']
+    
+    if color_code:
+        return f"{color_code}{text}{reset_code}"
+    return text
 
 def load_config(config_path):
     with open(config_path, 'r') as f:
@@ -54,6 +111,7 @@ def create_agent(agent_config):
     
     return {
         'name': agent_config['name'],
+        'color': agent_config.get('color', None),  # Optional color for this agent
         'agent': ChatAgent(
             system_message=agent_config['system_message'],
             model=model,
@@ -219,7 +277,14 @@ def run_discussion(config_path=None):
             response = agent_data['agent'].step(discussion_prompt)
             messages.append(response.msg)
             
-            print(f"{agent_data['name']}:")
+            agent_name = agent_data['name']
+            agent_color = agent_data.get('color')
+            
+            if agent_color:
+                print(f"{colorize(agent_name + ':', agent_color)}")
+            else:
+                print(f"{agent_name}:")
+            
             print(f"{response.msg.content}\n")
             
             last_speaker_idx = agents.index(agent_data)
@@ -238,3 +303,4 @@ def run_discussion(config_path=None):
 
 if __name__ == '__main__':
     run_discussion()
+    
