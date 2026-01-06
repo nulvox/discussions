@@ -51,11 +51,16 @@ def create_agent(agent_config):
         )
     }
 
-def should_participate(agent_data, messages):
+def should_participate(agent_data, messages, is_first_turn=False):
     """Ask agent if they want to participate this round"""
+    if is_first_turn:
+        decision_content = "Do you want to participate in this discussion? Reply only YES or NO."
+    else:
+        decision_content = "Given the discussion so far, do you have more to contribute? Reply only YES or NO."
+    
     decision_prompt = BaseMessage.make_user_message(
         role_name="Moderator",
-        content="Given the discussion so far, do you have more to contribute? Reply only YES or NO."
+        content=decision_content
     )
     
     try:
@@ -116,7 +121,7 @@ def run_discussion(config_path=None):
             print("Checking participation...\n")
             participants = []
             for agent_data in agents:
-                wants_to_speak = should_participate(agent_data, messages)
+                wants_to_speak = should_participate(agent_data, messages, is_first_turn=(turn == 1))
                 if wants_to_speak:
                     participants.append(agent_data)
                     print(f"  {agent_data['name']}: will speak")
@@ -157,6 +162,12 @@ def run_discussion(config_path=None):
             random.shuffle(agent_order)
         
         # Have agents speak
+        # Create a new discussion prompt with the full conversation history
+        discussion_prompt = BaseMessage.make_user_message(
+            role_name="Moderator",
+            content=f"Continue the discussion on: {topic}"
+        )
+        
         for agent_data in agent_order:
             # In random mode, prevent same agent speaking twice in a row
             if mode == 'random' and last_speaker_idx is not None:
@@ -164,7 +175,7 @@ def run_discussion(config_path=None):
                 if current_idx == last_speaker_idx:
                     continue
             
-            response = agent_data['agent'].step(messages[-1])
+            response = agent_data['agent'].step(discussion_prompt)
             messages.append(response.msg)
             
             print(f"{agent_data['name']}:")
