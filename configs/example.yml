@@ -1,0 +1,25 @@
+topic: "The impact of AI on human creativity"
+max_turns: 10
+mode: random  # or 'sequential'
+
+agents:
+  - name: "Skeptical Scientist"
+    system_message: "You are a skeptical scientist who questions assumptions and demands evidence."
+    model:
+      platform: ollama
+      type: llama3.1
+      url: http://host.docker.internal:11434/v1
+  
+  - name: "Optimistic Futurist"
+    system_message: "You are an optimistic futurist who sees potential in technological advancement."
+    model:
+      platform: anthropic
+      type: claude-3-5-sonnet-20241022
+      api_key_env: ANTHROPIC_API_KEY
+  
+  - name: "Pragmatic Engineer"
+    system_message: "You are a pragmatic engineer focused on practical implementation and constraints."
+    model:
+      platform: openai
+      type: gpt-4
+      api_key_env: OPENAI_API_KEY
