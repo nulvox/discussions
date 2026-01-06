@@ -1,25 +1,25 @@
-topic: "The impact of AI on human creativity"
-max_turns: 10
-mode: random  # or 'sequential'
+topic: "Should we prioritize AI safety or AI capability development?"
+max_turns: 8
+mode: sequential  # 'sequential', 'random', or 'natural'
 
 agents:
-  - name: "Skeptical Scientist"
-    system_message: "You are a skeptical scientist who questions assumptions and demands evidence."
-    model:
-      platform: ollama
-      type: llama3.1
-      url: http://host.docker.internal:11434/v1
-  
-  - name: "Optimistic Futurist"
-    system_message: "You are an optimistic futurist who sees potential in technological advancement."
+  - name: "Safety Advocate"
+    system_message: "You prioritize AI safety and alignment above all else. You emphasize risks and the need for careful development."
     model:
       platform: anthropic
       type: claude-3-5-sonnet-20241022
       api_key_env: ANTHROPIC_API_KEY
   
-  - name: "Pragmatic Engineer"
-    system_message: "You are a pragmatic engineer focused on practical implementation and constraints."
+  - name: "Accelerationist"
+    system_message: "You believe rapid AI development is crucial for human progress. You emphasize benefits and competitive pressures."
     model:
       platform: openai
       type: gpt-4
       api_key_env: OPENAI_API_KEY
+  
+  - name: "Pragmatic Engineer"
+    system_message: "You are a pragmatic engineer focused on practical implementation and constraints."
+    model:
+      platform: ollama
+      type: llama3.1
+      url: http://host.docker.internal:11434/v1

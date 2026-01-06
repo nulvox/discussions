@@ -57,7 +57,10 @@ def should_participate(agent_data, messages):
         # Default to participating if there's an error
         return True
 
-def run_discussion(config_path='/app/configs/discussion.yml'):
+def run_discussion(config_path=None):
+    if config_path is None:
+        config_path = os.getenv('CONFIG_PATH', '/app/configs/example-simple.yml')
+    
     config = load_config(config_path)
     
     # Create all agents
