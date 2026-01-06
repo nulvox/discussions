@@ -82,11 +82,23 @@ def create_agent(agent_config):
     }
     
     platform = platform_map[model_config['platform']]
+    
+    # Get timeout setting (None = unlimited, otherwise seconds)
+    # Default to 180s for commercial APIs, None for Ollama
+    if 'timeout' in model_config:
+        timeout = model_config['timeout']
+    elif model_config['platform'] == 'ollama':
+        timeout = None  # Unlimited for local models
+    else:
+        timeout = 180  # 3 minutes for hosted APIs
+    
     model_kwargs = {
         'model_platform': platform,
         'model_type': model_config['type'],
         'model_config_dict': {
-            'max_tokens': model_config.get('max_tokens', 4096)
+            'max_tokens': model_config.get('max_tokens', 4096),
+            # Set HTTP timeout - None means unlimited
+            'timeout': timeout if timeout is not None else 999999,
         }
     }
     
@@ -99,15 +111,6 @@ def create_agent(agent_config):
             model_kwargs['api_key'] = api_key
     
     model = ModelFactory.create(**model_kwargs)
-    
-    # Get timeout setting (None = unlimited, otherwise seconds)
-    # Default to 180s for commercial APIs, None for Ollama
-    if 'timeout' in model_config:
-        timeout = model_config['timeout']
-    elif model_config['platform'] == 'ollama':
-        timeout = None  # Unlimited for local models
-    else:
-        timeout = 180  # 3 minutes for hosted APIs
     
     return {
         'name': agent_config['name'],
