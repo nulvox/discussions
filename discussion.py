@@ -112,11 +112,25 @@ def create_agent(agent_config):
     
     model = ModelFactory.create(**model_kwargs)
     
+    # Get system message - either inline or from file
+    if 'system_message' in agent_config:
+        system_message = agent_config['system_message']
+    elif 'system_message_file' in agent_config:
+        # Load from external file
+        prompt_path = agent_config['system_message_file']
+        # If relative path, make it relative to /app/configs
+        if not prompt_path.startswith('/'):
+            prompt_path = f"/app/configs/{prompt_path}"
+        with open(prompt_path, 'r') as f:
+            system_message = f.read()
+    else:
+        raise ValueError(f"Agent {agent_config['name']} must have either 'system_message' or 'system_message_file'")
+    
     return {
         'name': agent_config['name'],
         'color': agent_config.get('color', None),  # Optional color for this agent
         'agent': ChatAgent(
-            system_message=agent_config['system_message'],
+            system_message=system_message,
             model=model,
             step_timeout=timeout
         )
@@ -306,4 +320,3 @@ def run_discussion(config_path=None):
 
 if __name__ == '__main__':
     run_discussion()
-    
