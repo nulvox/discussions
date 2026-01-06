@@ -10,9 +10,10 @@ This project uses the Camel-AI framework to orchestrate conversations between mu
 
 - **Multi-Provider Support**: Mix and match agents from different providers (OpenAI, Anthropic, Ollama, etc.)
 - **Flexible Agent Configuration**: Define unlimited agents with custom system prompts and models
-- **Conversation Modes**: 
-  - Sequential: Agents respond in the same order each turn
-  - Random: Agents respond in random order (preventing consecutive responses from the same agent)
+- **Three Conversation Modes**: 
+  - **Sequential**: Agents respond in the same order each turn
+  - **Random**: Agents respond in random order (preventing consecutive responses from the same agent)
+  - **Natural**: Agents decide each round whether to participate; discussion ends organically when no one has more to add
 - **Containerized**: Runs entirely in Docker with volume-mounted configs
 - **No Vendor Lock-in**: Use local models, commercial APIs, or both simultaneously
 
@@ -64,8 +65,9 @@ Edit `configs/discussion.yml` to define your discussion parameters:
 
 ```yaml
 topic: "Your discussion topic here"
-max_turns: 10
-mode: random  # or 'sequential'
+max_turns: 10  # Use 0 for unlimited (recommended with natural mode)
+mode: random  # 'sequential', 'random', or 'natural'
+solo_speaker_rounds_limit: 2  # Only used in natural mode
 
 agents:
   - name: "Agent Name"
@@ -102,12 +104,13 @@ model:
   url: http://host.docker.internal:11434/v1
 ```
 
-### Example Configuration
+### Example Configurations
 
+#### Sequential Mode (Structured Debate)
 ```yaml
 topic: "Should we prioritize AI safety or AI capability development?"
 max_turns: 8
-mode: random
+mode: sequential
 
 agents:
   - name: "Safety Advocate"
@@ -123,9 +126,32 @@ agents:
       platform: openai
       type: gpt-4
       api_key_env: OPENAI_API_KEY
+```
+
+#### Natural Mode (Organic Discussion)
+```yaml
+topic: "The ethical implications of artificial general intelligence"
+max_turns: 0  # Unlimited - let discussion end naturally
+mode: natural
+solo_speaker_rounds_limit: 2
+
+agents:
+  - name: "AI Safety Researcher"
+    system_message: "You are an AI safety researcher focused on alignment and existential risk. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
+    model:
+      platform: anthropic
+      type: claude-3-5-sonnet-20241022
+      api_key_env: ANTHROPIC_API_KEY
   
-  - name: "Neutral Researcher"
-    system_message: "You take an objective, data-driven approach. You ask clarifying questions and seek evidence for claims."
+  - name: "Tech Optimist"
+    system_message: "You are a technology optimist who believes AGI will solve humanity's greatest challenges. When you feel you have nothing new to add, decline to continue participating."
+    model:
+      platform: openai
+      type: gpt-4
+      api_key_env: OPENAI_API_KEY
+  
+  - name: "Philosopher"
+    system_message: "You examine fundamental questions about consciousness and intelligence. When you feel the discussion has covered your key points, decline to continue participating."
     model:
       platform: ollama
       type: llama3.1
@@ -164,6 +190,7 @@ Agents respond in the order they appear in the configuration file. Predictable a
 
 ```yaml
 mode: sequential
+max_turns: 10
 ```
 
 **Turn Flow:**
@@ -173,11 +200,14 @@ Turn 2: Agent A → Agent B → Agent C
 Turn 3: Agent A → Agent B → Agent C
 ```
 
+**Best for:** Formal debates, structured analysis, round-robin discussions
+
 ### Random Mode
 Agents respond in random order each turn. More dynamic and unpredictable. Prevents the same agent from speaking twice consecutively.
 
 ```yaml
 mode: random
+max_turns: 10
 ```
 
 **Turn Flow:**
@@ -186,6 +216,45 @@ Turn 1: Agent C → Agent A → Agent B
 Turn 2: Agent B → Agent C → Agent A
 Turn 3: Agent A → Agent B → Agent C
 ```
+
+**Best for:** Dynamic conversations, simulating natural group discussions
+
+### Natural Mode (NEW)
+Agents decide each round whether they want to participate. The discussion continues until either:
+- No agents want to participate in a round
+- The same single agent is the only participant for `solo_speaker_rounds_limit` consecutive rounds
+
+```yaml
+mode: natural
+max_turns: 0  # Recommended: unlimited
+solo_speaker_rounds_limit: 2
+```
+
+**Turn Flow:**
+```
+Turn 1: [All agents asked if they want to speak]
+        Agent A: YES → speaks
+        Agent B: YES → speaks
+        Agent C: NO → passes
+Turn 2: [Check participation again]
+        Agent A: YES → speaks
+        Agent B: NO → passes
+        Agent C: NO → passes
+Turn 3: [Only Agent A wants to speak for 2nd consecutive round]
+        Discussion ends
+```
+
+**Best for:** 
+- Organic discussions that reach natural conclusions
+- Letting agents determine when a topic is exhausted
+- More realistic conversation dynamics
+- Avoiding forced participation when agents have nothing new to add
+
+**Important Notes for Natural Mode:**
+- Set `max_turns: 0` for unlimited turns (recommended)
+- Include guidance in agent system messages about when to decline participation
+- Adjust `solo_speaker_rounds_limit` based on desired discussion length (2-3 recommended)
+- Uses more API tokens (each agent makes participation decision before potentially speaking)
 
 ## Using Ollama with Docker
 
@@ -206,11 +275,11 @@ Good system messages should:
 - Define a clear perspective or expertise area
 - Specify communication style (analytical, emotional, technical, etc.)
 - Include any constraints or focus areas
-- Avoid being overly restrictive
+- For natural mode: explicitly instruct agents when to decline participation
 
-**Example:**
+**Example for Natural Mode:**
 ```yaml
-system_message: "You are a veteran software engineer with 20 years of experience. You prioritize maintainability and pragmatic solutions over clever hacks. You're skeptical of trends but open to proven technologies."
+system_message: "You are a veteran software engineer with 20 years of experience. You prioritize maintainability and pragmatic solutions over clever hacks. You're skeptical of trends but open to proven technologies. When the discussion reaches a point where you've shared your key insights and others are repeating points, you should decline to continue participating."
 ```
 
 ### Adjusting Discussion Length
@@ -219,6 +288,7 @@ system_message: "You are a veteran software engineer with 20 years of experience
 max_turns: 5   # Quick discussion
 max_turns: 15  # In-depth exploration
 max_turns: 30  # Extended debate
+max_turns: 0   # Unlimited (natural mode only)
 ```
 
 ### Multi-Perspective Discussions
@@ -246,8 +316,15 @@ Create agents with complementary viewpoints:
 - Verify you have access to the specified model
 - Some models may have rate limits or quotas
 
-### Same agent speaking twice in a row (random mode)
-This shouldn't happen, but if it does, it's a edge case in the shuffle logic. The code prevents this, but with only 2 agents in random mode, consider using sequential mode instead.
+### Natural mode discussions ending too quickly
+- Increase `solo_speaker_rounds_limit` (try 3-4)
+- Adjust agent system messages to be less eager to decline participation
+- Check that agents aren't misunderstanding the participation prompt
+
+### Natural mode discussions never ending
+- Ensure agent system messages include guidance on when to stop
+- Set a reasonable `max_turns` limit as a failsafe (e.g., 50)
+- Agents may be too eager to participate - adjust personas
 
 ## Extending the Project
 
@@ -303,6 +380,8 @@ Contributions are welcome! Please feel free to submit a Pull Request. Some ideas
 - Support for tool use and function calling
 - Integration with vector databases for RAG
 - Conversation branching and multi-threading
+- Voting mechanisms for natural mode termination
+- Custom termination conditions
 
 ### Development
 

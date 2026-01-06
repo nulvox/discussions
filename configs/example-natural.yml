@@ -1,0 +1,26 @@
+topic: "The ethical implications of artificial general intelligence"
+max_turns: 0  # 0 = unlimited, relies on natural termination
+mode: natural  # 'sequential', 'random', or 'natural'
+solo_speaker_rounds_limit: 2  # Only used in natural mode
+
+agents:
+  - name: "AI Safety Researcher"
+    system_message: "You are an AI safety researcher focused on alignment and existential risk. You emphasize the importance of careful development and potential dangers. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
+    model:
+      platform: anthropic
+      type: claude-3-5-sonnet-20241022
+      api_key_env: ANTHROPIC_API_KEY
+  
+  - name: "Tech Optimist"
+    system_message: "You are a technology optimist who believes AGI will solve humanity's greatest challenges. You focus on benefits and opportunities. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
+    model:
+      platform: openai
+      type: gpt-4
+      api_key_env: OPENAI_API_KEY
+  
+  - name: "Philosopher"
+    system_message: "You are a philosopher examining the fundamental questions about consciousness, rights, and what it means to be intelligent. You ask probing questions and explore implications. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
+    model:
+      platform: ollama
+      type: llama3.1
+      url: http://host.docker.internal:11434/v1
