@@ -43,20 +43,30 @@ def create_agent(agent_config):
     
     model = ModelFactory.create(**model_kwargs)
     
+    # Get timeout setting (None = unlimited, otherwise seconds)
+    # Default to 180s for commercial APIs, None for Ollama
+    if 'timeout' in model_config:
+        timeout = model_config['timeout']
+    elif model_config['platform'] == 'ollama':
+        timeout = None  # Unlimited for local models
+    else:
+        timeout = 180  # 3 minutes for hosted APIs
+    
     return {
         'name': agent_config['name'],
         'agent': ChatAgent(
             system_message=agent_config['system_message'],
-            model=model
+            model=model,
+            step_timeout=timeout
         )
     }
 
 def should_participate(agent_data, messages, is_first_turn=False):
-    """Ask agent if they want to participate this round"""
+    """Ask agent if they want to participate this round and how interested they are"""
     if is_first_turn:
-        decision_content = "Do you want to participate in this discussion? Reply only YES or NO."
+        decision_content = "Do you want to participate in this discussion? Rate your interest from 0 (not interested, will not participate) to 10 (very interested, have important points to make). Reply with only a number 0-10."
     else:
-        decision_content = "Given the discussion so far, do you have more to contribute? Reply only YES or NO."
+        decision_content = "Given the discussion so far, how interested are you in contributing further? Rate from 0 (nothing more to add, will not participate) to 10 (very interested, have important points to make). Reply with only a number 0-10."
     
     decision_prompt = BaseMessage.make_user_message(
         role_name="Moderator",
@@ -65,13 +75,23 @@ def should_participate(agent_data, messages, is_first_turn=False):
     
     try:
         response = agent_data['agent'].step(decision_prompt)
-        response_text = response.msg.content.lower().strip()
-        # Check for affirmative responses
-        return any(word in response_text for word in ['yes', 'continue', 'speak', 'participate'])
+        response_text = response.msg.content.strip()
+        
+        # Extract number from response
+        import re
+        numbers = re.findall(r'\d+', response_text)
+        if numbers:
+            score = int(numbers[0])
+            # Clamp to 0-10 range
+            score = max(0, min(10, score))
+            return score
+        else:
+            # If can't parse, default to participating with medium interest
+            return 5
     except Exception as e:
         print(f"Error getting participation decision from {agent_data['name']}: {e}")
-        # Default to participating if there's an error
-        return True
+        # Default to medium interest if there's an error
+        return 5
 
 def run_discussion(config_path=None):
     if config_path is None:
@@ -106,6 +126,9 @@ def run_discussion(config_path=None):
     last_solo_speaker = None
     turn = 0
     
+    # Track when each agent last spoke (turn number)
+    agent_last_spoke = {agent['name']: 0 for agent in agents}
+    
     while True:
         turn += 1
         
@@ -119,16 +142,33 @@ def run_discussion(config_path=None):
         # Natural mode: ask agents if they want to participate
         if mode == 'natural':
             print("Checking participation...\n")
-            participants = []
+            participation_scores = []
             for agent_data in agents:
-                wants_to_speak = should_participate(agent_data, messages, is_first_turn=(turn == 1))
-                if wants_to_speak:
-                    participants.append(agent_data)
-                    print(f"  {agent_data['name']}: will speak")
+                interest_score = should_participate(agent_data, messages, is_first_turn=(turn == 1))
+                participation_scores.append((agent_data, interest_score))
+                if interest_score > 0:
+                    print(f"  {agent_data['name']}: interest level {interest_score}/10")
                 else:
                     print(f"  {agent_data['name']}: passing")
             
             print()
+            
+            # Filter to only agents who want to participate (score > 0)
+            participants = [agent_data for agent_data, score in participation_scores if score > 0]
+            
+            # Sort by:
+            # 1. Interest score (descending) - higher interest speaks first
+            # 2. Last spoke turn (ascending) - spoke longer ago speaks first in ties
+            # 3. Config order (ascending) - earlier in config speaks first as final tiebreaker
+            participation_scores = [(agent_data, score) for agent_data, score in participation_scores if score > 0]
+            participation_scores.sort(
+                key=lambda x: (
+                    -x[1],  # Interest score (negative for descending)
+                    agent_last_spoke[x[0]['name']],  # Last spoke turn (ascending)
+                    agents.index(x[0])  # Config order (ascending)
+                )
+            )
+            participants = [agent_data for agent_data, score in participation_scores]
             
             # Check termination conditions
             if len(participants) == 0:
@@ -162,7 +202,7 @@ def run_discussion(config_path=None):
             random.shuffle(agent_order)
         
         # Have agents speak
-        # Create a new discussion prompt with the full conversation history
+        # Create a prompt for continuing the discussion
         discussion_prompt = BaseMessage.make_user_message(
             role_name="Moderator",
             content=f"Continue the discussion on: {topic}"
@@ -175,6 +215,7 @@ def run_discussion(config_path=None):
                 if current_idx == last_speaker_idx:
                     continue
             
+            # Agent gets full context including what others said earlier this round
             response = agent_data['agent'].step(discussion_prompt)
             messages.append(response.msg)
             
@@ -182,6 +223,14 @@ def run_discussion(config_path=None):
             print(f"{response.msg.content}\n")
             
             last_speaker_idx = agents.index(agent_data)
+            agent_last_spoke[agent_data['name']] = turn  # Track when this agent spoke
+            
+            # After each agent speaks, update ALL other participating agents' context
+            # so they can respond to what was just said
+            for other_agent_data in agent_order:
+                if other_agent_data != agent_data:
+                    # Update the other agent's memory with what was just said
+                    other_agent_data['agent'].update_memory(response.msg, "assistant")
     
     print(f"{'='*80}")
     print(f"Discussion ended after {turn} turns")
