@@ -9,6 +9,7 @@ agents:
       platform: anthropic
       type: claude-3-5-sonnet-20241022
       api_key_env: ANTHROPIC_API_KEY
+      max_tokens: 4096
   
   - name: "Accelerationist"
     system_message: "You believe rapid AI development is crucial for human progress. You emphasize benefits and competitive pressures."
@@ -16,6 +17,7 @@ agents:
       platform: openai
       type: gpt-4
       api_key_env: OPENAI_API_KEY
+      max_tokens: 4096
   
   - name: "Pragmatic Engineer"
     system_message: "You are a pragmatic engineer focused on practical implementation and constraints."
@@ -23,3 +25,4 @@ agents:
       platform: ollama
       type: llama3.1
       url: http://host.docker.internal:11434/v1
+      max_tokens: 4096

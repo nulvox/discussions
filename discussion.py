@@ -2,10 +2,15 @@
 import yaml
 import random
 import os
+import logging
 from camel.agents import ChatAgent
 from camel.messages import BaseMessage
 from camel.models import ModelFactory
 from camel.types import ModelPlatformType
+
+# Suppress camel-ai warnings
+logging.getLogger('camel').setLevel(logging.ERROR)
+logging.getLogger('root').setLevel(logging.ERROR)
 
 def load_config(config_path):
     with open(config_path, 'r') as f:
@@ -20,7 +25,13 @@ def create_agent(agent_config):
     }
     
     platform = platform_map[model_config['platform']]
-    model_kwargs = {'model_platform': platform, 'model_type': model_config['type']}
+    model_kwargs = {
+        'model_platform': platform,
+        'model_type': model_config['type'],
+        'model_config_dict': {
+            'max_tokens': model_config.get('max_tokens', 4096)
+        }
+    }
     
     if 'url' in model_config:
         model_kwargs['url'] = model_config['url']

@@ -10,6 +10,7 @@ agents:
       platform: anthropic
       type: claude-3-5-sonnet-20241022
       api_key_env: ANTHROPIC_API_KEY
+      max_tokens: 4096
   
   - name: "Tech Optimist"
     system_message: "You are a technology optimist who believes AGI will solve humanity's greatest challenges. You focus on benefits and opportunities. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
@@ -17,6 +18,7 @@ agents:
       platform: openai
       type: gpt-4
       api_key_env: OPENAI_API_KEY
+      max_tokens: 4096
   
   - name: "Philosopher"
     system_message: "You are a philosopher examining the fundamental questions about consciousness, rights, and what it means to be intelligent. You ask probing questions and explore implications. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
@@ -24,3 +26,4 @@ agents:
       platform: ollama
       type: llama3.1
       url: http://host.docker.internal:11434/v1
+      max_tokens: 4096
