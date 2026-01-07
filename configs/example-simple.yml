@@ -2,6 +2,22 @@ topic: "Should we prioritize AI safety or AI capability development?"
 max_turns: 8
 mode: sequential  # 'sequential', 'random', or 'natural'
 
+# Optional: Enable conversation logging
+logging:
+  enabled: false
+  path: /app/logs/conversation.txt
+
+# Optional: Enable moderator scoring
+moderator:
+  enabled: false
+  color: bright_yellow
+  system_message_file: "prompts/moderator.txt"
+  model:
+    platform: ollama
+    type: gpt-oss:20b
+    url: http://host.docker.internal:11434/v1
+    max_tokens: 4096
+
 agents:
   - name: "Safety Advocate"
     color: red

@@ -14,6 +14,12 @@ This project uses the Camel-AI framework to orchestrate conversations between mu
   - **Sequential**: Agents respond in the same order each turn
   - **Random**: Agents respond in random order (preventing consecutive responses from the same agent)
   - **Natural**: Agents decide each round whether to participate; discussion ends organically when no one has more to add
+- **Interest-Based Turn Order**: In natural mode, agents with higher interest speak first, with tiebreaking by recency
+- **Optional Moderator Scoring**: AI moderator scores participants after each round based on argument quality
+- **Conversation Logging**: Save full discussions to file for later review
+- **Colored Output**: Agent names displayed in color for easy reading (when terminal supports it)
+- **External Prompt Files**: Store long agent prompts in separate files for better organization
+- **Connection Verification**: Pre-flight checks ensure all endpoints are reachable before starting
 - **Containerized**: Runs entirely in Docker with volume-mounted configs
 - **No Vendor Lock-in**: Use local models, commercial APIs, or both simultaneously
 
@@ -36,11 +42,18 @@ cd discussions
 docker-compose build
 ```
 
-3. Edit `configs/discussion.yml` to configure your agents and topic (see Configuration section below).
+3. Edit a config file or use the examples (see Configuration section below).
 
 4. Run a discussion:
 ```bash
-docker-compose run discussion
+# Use default config (example-simple.yml)
+docker-compose run --rm discussion
+
+# Use a specific config file
+docker-compose run --rm discussion example-natural.yml
+
+# Use custom config
+docker-compose run --rm discussion my-config.yml
 ```
 
 ## Project Structure
@@ -53,13 +66,18 @@ discussions/
 ├── discussion.py           # Main application
 ├── README.md              # This file
 ├── .env.example           # Example environment variables
-└── configs/
-    └── discussion.yml     # Agent and topic configuration
+├── configs/               # Configuration files
+│   ├── example-simple.yml
+│   ├── example-natural.yml
+│   └── prompts/           # External prompt files
+│       ├── philosopher.txt
+│       └── moderator.txt
+└── logs/                  # Conversation logs (created when logging enabled)
 ```
 
 ## Configuration
 
-Edit `configs/discussion.yml` to define your discussion parameters:
+Edit YAML config files in `configs/` to define your discussion parameters:
 
 ### Basic Structure
 
@@ -69,13 +87,60 @@ max_turns: 10  # Use 0 for unlimited (recommended with natural mode)
 mode: random  # 'sequential', 'random', or 'natural'
 solo_speaker_rounds_limit: 2  # Only used in natural mode
 
+# Optional: Enable conversation logging
+logging:
+  enabled: true
+  path: /app/logs/conversation.txt
+
+# Optional: Enable moderator scoring
+moderator:
+  enabled: true
+  color: bright_yellow
+  system_message_file: "prompts/moderator.txt"
+  model:
+    platform: ollama
+    type: llama3.1
+    url: http://host.docker.internal:11434/v1
+    max_tokens: 4096
+    timeout: null  # null = unlimited for local models
+
 agents:
   - name: "Agent Name"
+    color: cyan  # Optional
     system_message: "Agent's personality and instructions"
+    # OR use external file:
+    # system_message_file: "prompts/agent.txt"
     model:
       platform: provider_name
       type: model_identifier
-      # Additional provider-specific settings
+      max_tokens: 4096
+      timeout: null  # null for unlimited (recommended for local models)
+```
+
+### Agent Prompts
+
+**Inline (for short-medium prompts):**
+```yaml
+system_message: "Short single-line prompt"
+```
+
+**Multiline with `|` (preserves formatting):**
+```yaml
+system_message: |
+  You are an expert in philosophy.
+  
+  Your background:
+  - PhD from Oxford
+  - 20 years teaching experience
+  
+  Your style:
+  - Ask probing questions
+  - Challenge assumptions
+```
+
+**External file (for long prompts):**
+```yaml
+system_message_file: "prompts/my-agent.txt"
 ```
 
 ### Supported Platforms
@@ -86,6 +151,8 @@ model:
   platform: openai
   type: gpt-4
   api_key_env: OPENAI_API_KEY
+  max_tokens: 4096
+  timeout: 180  # 3 minutes
 ```
 
 #### Anthropic (Claude)
@@ -94,6 +161,8 @@ model:
   platform: anthropic
   type: claude-3-5-sonnet-20241022
   api_key_env: ANTHROPIC_API_KEY
+  max_tokens: 4096
+  timeout: 180
 ```
 
 #### Ollama (Local Models)
@@ -102,85 +171,45 @@ model:
   platform: ollama
   type: llama3.1
   url: http://host.docker.internal:11434/v1
-```
-
-### Example Configurations
-
-#### Sequential Mode (Structured Debate)
-```yaml
-topic: "Should we prioritize AI safety or AI capability development?"
-max_turns: 8
-mode: sequential
-
-agents:
-  - name: "Safety Advocate"
-    system_message: "You prioritize AI safety and alignment above all else. You emphasize risks and the need for careful development."
-    model:
-      platform: anthropic
-      type: claude-3-5-sonnet-20241022
-      api_key_env: ANTHROPIC_API_KEY
-  
-  - name: "Accelerationist"
-    system_message: "You believe rapid AI development is crucial for human progress. You emphasize benefits and competitive pressures."
-    model:
-      platform: openai
-      type: gpt-4
-      api_key_env: OPENAI_API_KEY
-```
-
-#### Natural Mode (Organic Discussion)
-```yaml
-topic: "The ethical implications of artificial general intelligence"
-max_turns: 0  # Unlimited - let discussion end naturally
-mode: natural
-solo_speaker_rounds_limit: 2
-
-agents:
-  - name: "AI Safety Researcher"
-    system_message: "You are an AI safety researcher focused on alignment and existential risk. When you feel the discussion has covered your key points or you have nothing new to add, you should decline to continue participating."
-    model:
-      platform: anthropic
-      type: claude-3-5-sonnet-20241022
-      api_key_env: ANTHROPIC_API_KEY
-  
-  - name: "Tech Optimist"
-    system_message: "You are a technology optimist who believes AGI will solve humanity's greatest challenges. When you feel you have nothing new to add, decline to continue participating."
-    model:
-      platform: openai
-      type: gpt-4
-      api_key_env: OPENAI_API_KEY
-  
-  - name: "Philosopher"
-    system_message: "You examine fundamental questions about consciousness and intelligence. When you feel the discussion has covered your key points, decline to continue participating."
-    model:
-      platform: ollama
-      type: llama3.1
-      url: http://host.docker.internal:11434/v1
+  max_tokens: 4096
+  timeout: null  # Unlimited - recommended for local models
 ```
 
 ## Usage
 
-### With API Keys
+### Basic Usage
 
-If using commercial providers, set your API keys:
+```bash
+# Use default config
+docker-compose run --rm discussion
+
+# Use specific config
+docker-compose run --rm discussion example-natural.yml
+
+# With API keys (if using .env file)
+docker-compose run --rm discussion
+```
+
+### With API Keys
 
 **Option 1: Environment file (recommended)**
 ```bash
 cp .env.example .env
 # Edit .env with your API keys
-docker-compose run discussion
+docker-compose run --rm discussion
 ```
 
 **Option 2: Inline environment variables**
 ```bash
-ANTHROPIC_API_KEY=sk-... OPENAI_API_KEY=sk-... docker-compose run discussion
+ANTHROPIC_API_KEY=sk-... OPENAI_API_KEY=sk-... docker-compose run --rm discussion
 ```
 
 ### With Local Models Only
 
-If using only Ollama, no API keys are needed:
+If using only Ollama, no API keys are needed. Make sure Ollama is running:
 ```bash
-docker-compose run discussion
+ollama serve
+docker-compose run --rm discussion
 ```
 
 ## Conversation Modes
@@ -193,13 +222,6 @@ mode: sequential
 max_turns: 10
 ```
 
-**Turn Flow:**
-```
-Turn 1: Agent A → Agent B → Agent C
-Turn 2: Agent A → Agent B → Agent C
-Turn 3: Agent A → Agent B → Agent C
-```
-
 **Best for:** Formal debates, structured analysis, round-robin discussions
 
 ### Random Mode
@@ -210,19 +232,14 @@ mode: random
 max_turns: 10
 ```
 
-**Turn Flow:**
-```
-Turn 1: Agent C → Agent A → Agent B
-Turn 2: Agent B → Agent C → Agent A
-Turn 3: Agent A → Agent B → Agent C
-```
-
 **Best for:** Dynamic conversations, simulating natural group discussions
 
-### Natural Mode (NEW)
-Agents decide each round whether they want to participate. The discussion continues until either:
+### Natural Mode
+Agents rate their interest (0-10) each round and decide whether to participate. The discussion continues until either:
 - No agents want to participate in a round
 - The same single agent is the only participant for `solo_speaker_rounds_limit` consecutive rounds
+
+Agents are sorted by interest level (highest first), with tiebreaking by who spoke least recently, then by config order.
 
 ```yaml
 mode: natural
@@ -230,31 +247,66 @@ max_turns: 0  # Recommended: unlimited
 solo_speaker_rounds_limit: 2
 ```
 
-**Turn Flow:**
-```
-Turn 1: [All agents asked if they want to speak]
-        Agent A: YES → speaks
-        Agent B: YES → speaks
-        Agent C: NO → passes
-Turn 2: [Check participation again]
-        Agent A: YES → speaks
-        Agent B: NO → passes
-        Agent C: NO → passes
-Turn 3: [Only Agent A wants to speak for 2nd consecutive round]
-        Discussion ends
-```
-
 **Best for:** 
 - Organic discussions that reach natural conclusions
 - Letting agents determine when a topic is exhausted
 - More realistic conversation dynamics
-- Avoiding forced participation when agents have nothing new to add
 
-**Important Notes for Natural Mode:**
-- Set `max_turns: 0` for unlimited turns (recommended)
-- Include guidance in agent system messages about when to decline participation
-- Adjust `solo_speaker_rounds_limit` based on desired discussion length (2-3 recommended)
-- Uses more API tokens (each agent makes participation decision before potentially speaking)
+## Moderator Scoring
+
+Enable an AI moderator to score participant responses after each round:
+
+```yaml
+moderator:
+  enabled: true
+  color: bright_yellow
+  system_message_file: "prompts/moderator.txt"
+  model:
+    platform: ollama
+    type: llama3.1
+    url: http://host.docker.internal:11434/v1
+```
+
+**Scoring:**
+- Range: -5 to +5 per response
+- Positive: Strong arguments, evidence, staying on-topic
+- Negative: Logical fallacies, personal attacks, going off-topic
+- Running totals displayed after each round
+- Final scores shown at end of discussion
+
+**Example output:**
+```
+--- Moderator Scoring ---
+  AI Safety Researcher: +3 (total: 15)
+  Tech Optimist: +2 (total: 12)
+  Philosopher: +4 (total: 18)
+```
+
+## Conversation Logging
+
+Enable logging to save full conversations:
+
+```yaml
+logging:
+  enabled: true
+  path: /app/logs/conversation.txt  # Optional, this is default
+```
+
+Logs are saved to `./logs/` on your host machine and persist after the container exits.
+
+## Colored Output
+
+Assign colors to agents for easier reading:
+
+```yaml
+agents:
+  - name: "Safety Advocate"
+    color: red
+    # or: bright_red, green, bright_green, blue, bright_blue, 
+    #     cyan, bright_cyan, magenta, bright_magenta, yellow, bright_yellow
+```
+
+Colors only work when terminal supports them (automatically detected).
 
 ## Using Ollama with Docker
 
@@ -265,7 +317,9 @@ If running Ollama on your host machine, the URL `http://host.docker.internal:114
 url: http://192.168.1.100:11434/v1  # Replace with your actual IP
 ```
 
-Or add `--network host` to your docker-compose configuration.
+Or add `network_mode: host` to your docker-compose configuration.
+
+**Important**: Set `timeout: null` for Ollama models to avoid timeouts with slower local models.
 
 ## Customization Tips
 
@@ -277,9 +331,22 @@ Good system messages should:
 - Include any constraints or focus areas
 - For natural mode: explicitly instruct agents when to decline participation
 
-**Example for Natural Mode:**
+**Example:**
 ```yaml
-system_message: "You are a veteran software engineer with 20 years of experience. You prioritize maintainability and pragmatic solutions over clever hacks. You're skeptical of trends but open to proven technologies. When the discussion reaches a point where you've shared your key insights and others are repeating points, you should decline to continue participating."
+system_message: |
+  You are a veteran software engineer with 20 years of experience.
+  
+  Your priorities:
+  - Maintainability over clever hacks
+  - Proven technologies over trends
+  - Pragmatic solutions over perfect ones
+  
+  Your style:
+  - Direct and concise
+  - Ask clarifying questions
+  - Cite real-world examples
+  
+  When the discussion has covered your key insights, decline to participate.
 ```
 
 ### Adjusting Discussion Length
@@ -302,8 +369,12 @@ Create agents with complementary viewpoints:
 ## Troubleshooting
 
 ### "Connection refused" with Ollama
+```
+Unable to connect to ollama endpoint...
+```
 - Ensure Ollama is running: `ollama serve`
-- Verify the URL in your config matches your Ollama endpoint
+- Verify the model is available: `ollama list`
+- Check the URL in your config matches your Ollama endpoint
 - On Linux, try using your host IP instead of `host.docker.internal`
 
 ### "Authentication failed" errors
@@ -314,17 +385,23 @@ Create agents with complementary viewpoints:
 ### Agent not responding / hanging
 - Check that the model type is correct for the platform
 - Verify you have access to the specified model
-- Some models may have rate limits or quotas
+- For local models: Set `timeout: null` to allow unlimited response time
+- Some commercial models may have rate limits or quotas
 
 ### Natural mode discussions ending too quickly
 - Increase `solo_speaker_rounds_limit` (try 3-4)
 - Adjust agent system messages to be less eager to decline participation
-- Check that agents aren't misunderstanding the participation prompt
+- Ensure agents have clear guidance on when to continue vs. stop
 
 ### Natural mode discussions never ending
-- Ensure agent system messages include guidance on when to stop
 - Set a reasonable `max_turns` limit as a failsafe (e.g., 50)
+- Ensure agent system messages include guidance on when to stop
 - Agents may be too eager to participate - adjust personas
+
+### Moderator giving inconsistent scores
+- Use more specific scoring criteria in the moderator prompt
+- Increase `max_tokens` for moderator to allow more reasoning
+- Try different models - some follow numerical instructions better
 
 ## Extending the Project
 
@@ -343,28 +420,6 @@ platform_map = {
 
 Check Camel-AI documentation for supported platforms.
 
-### Logging Conversations
-
-To save conversations to a file, modify `discussion.py` to write output to both stdout and a log file:
-
-```python
-import sys
-
-log_file = open('/app/logs/conversation.txt', 'w')
-
-def log_print(message):
-    print(message)
-    log_file.write(message + '\n')
-    log_file.flush()
-```
-
-Then mount a logs directory in `docker-compose.yml`:
-```yaml
-volumes:
-  - ./configs:/app/configs:ro
-  - ./logs:/app/logs
-```
-
 ## License
 
 MIT License - see LICENSE file for details.
@@ -374,14 +429,14 @@ Please respect the terms of service for any LLM providers you use.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. Some ideas for enhancement:
-- Add support for message history persistence
-- Implement conversation summarization between turns
-- Add web UI for configuration and monitoring
+- Support for message history persistence across sessions
+- Web UI for configuration and monitoring
 - Support for tool use and function calling
 - Integration with vector databases for RAG
 - Conversation branching and multi-threading
 - Voting mechanisms for natural mode termination
 - Custom termination conditions
+- Real-time streaming of agent responses
 
 ### Development
 
@@ -391,7 +446,9 @@ To work on the project locally without Docker:
 python -m venv venv
 source venv/bin/activate  # or `venv\Scripts\activate` on Windows
 pip install -r requirements.txt
-python discussion.py
+
+# Run with specific config
+python discussion.py configs/example-natural.yml
 ```
 
 ## Acknowledgments

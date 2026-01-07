@@ -1,0 +1,51 @@
+topic: "The ethical implications of artificial general intelligence"
+max_turns: 0  # 0 = unlimited, relies on natural termination
+mode: natural  # 'sequential', 'random', or 'natural'
+solo_speaker_rounds_limit: 2  # Only used in natural mode
+
+# Optional: Enable conversation logging
+logging:
+  enabled: true
+  path: /app/logs/conversation.txt
+
+# Optional: Enable moderator scoring
+moderator:
+  enabled: false
+  color: bright_yellow
+  system_message_file: "prompts/moderator.txt"
+  model:
+    platform: ollama
+    type: gpt-oss:20b
+    url: http://host.docker.internal:11434/v1
+    max_tokens: 4096
+
+agents:
+  - name: "Robert Miles"
+    color: bright_red
+    system_message_file: "prompts/miles.txt"
+    model:
+      platform: ollama
+      type: gpt-oss:20b
+      url: http://host.docker.internal:11434/v1
+      max_tokens: 4096
+      timeout: null
+  
+  - name: "Sam Altman"
+    color: bright_green
+    system_message_file: "prompts/altman.txt"
+    model:
+      platform: ollama
+      type: gpt-oss:20b
+      url: http://host.docker.internal:11434/v1
+      max_tokens: 4096
+      timeout: null
+  
+  - name: "Alan Watts"
+    color: bright_blue
+    system_message_file: "prompts/watts.txt"
+    model:
+      platform: ollama
+      type: gpt-oss:20b
+      url: http://host.docker.internal:11434/v1
+      max_tokens: 4096
+      timeout: null

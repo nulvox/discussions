@@ -136,6 +136,66 @@ Possible causes:
         return False, f"Error connecting to {platform} endpoint for agent '{agent_name}': {str(e)}"
 
 
+def create_moderator(moderator_config):
+    """Create a moderator agent for scoring participants"""
+    model_config = moderator_config['model']
+    platform_map = {
+        'ollama': ModelPlatformType.OLLAMA,
+        'anthropic': ModelPlatformType.ANTHROPIC,
+        'openai': ModelPlatformType.OPENAI,
+    }
+    
+    platform = platform_map[model_config['platform']]
+    
+    # Get timeout setting
+    if 'timeout' in model_config:
+        timeout = model_config['timeout']
+    elif model_config['platform'] == 'ollama':
+        timeout = None
+    else:
+        timeout = 180
+    
+    model_kwargs = {
+        'model_platform': platform,
+        'model_type': model_config['type'],
+        'model_config_dict': {
+            'max_tokens': model_config.get('max_tokens', 4096),
+            'timeout': timeout if timeout is not None else 999999,
+        }
+    }
+    
+    if 'url' in model_config:
+        model_kwargs['url'] = model_config['url']
+    
+    if 'api_key_env' in model_config:
+        api_key = os.getenv(model_config['api_key_env'])
+        if api_key:
+            model_kwargs['api_key'] = api_key
+    
+    model = ModelFactory.create(**model_kwargs)
+    
+    # Get system message - either inline or from file
+    if 'system_message' in moderator_config:
+        system_message = moderator_config['system_message']
+    elif 'system_message_file' in moderator_config:
+        prompt_path = moderator_config['system_message_file']
+        if not prompt_path.startswith('/'):
+            prompt_path = f"/app/configs/{prompt_path}"
+        with open(prompt_path, 'r') as f:
+            system_message = f.read()
+    else:
+        raise ValueError("Moderator must have either 'system_message' or 'system_message_file'")
+    
+    return {
+        'color': moderator_config.get('color', None),
+        'agent': ChatAgent(
+            system_message=system_message,
+            model=model,
+            step_timeout=timeout
+        )
+    }
+
+
 def create_agent(agent_config):
     model_config = agent_config['model']
     platform_map = {
@@ -237,22 +297,51 @@ def run_discussion(config_path=None):
     
     config = load_config(config_path)
     
+    # Set up conversation logging if enabled
+    log_file = None
+    if config.get('logging', {}).get('enabled', False):
+        log_path = config.get('logging', {}).get('path', '/app/logs/conversation.txt')
+        # Create logs directory if it doesn't exist
+        log_dir = os.path.dirname(log_path)
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = open(log_path, 'w', encoding='utf-8')
+        
+        def log_print(message, end='\n'):
+            """Print to both stdout and log file"""
+            print(message, end=end)
+            if log_file:
+                log_file.write(message + end)
+                log_file.flush()
+    else:
+        def log_print(message, end='\n'):
+            """Print only to stdout"""
+            print(message, end=end)
+    
     # Verify all agent connections before starting
-    print("Verifying agent connections...\n")
+    log_print("Verifying agent connections...\n")
     for agent_config in config['agents']:
         agent_name = agent_config['name']
-        print(f"  Checking {agent_name}...", end=' ')
+        log_print(f"  Checking {agent_name}...", end=' ')
         success, error_msg = verify_agent_connection(agent_config)
         if not success:
-            print("FAILED")
-            print(f"\n{error_msg}")
-            print("\nPlease fix the connection issue and try again.")
+            log_print("FAILED")
+            log_print(f"\n{error_msg}")
+            log_print("\nPlease fix the connection issue and try again.")
+            if log_file:
+                log_file.close()
             return
-        print("OK")
-    print()
+        log_print("OK")
+    log_print()
     
     # Create all agents
     agents = [create_agent(agent_config) for agent_config in config['agents']]
+    
+    # Create moderator if enabled
+    moderator = None
+    agent_scores = {agent['name']: 0 for agent in agents}
+    if config.get('moderator', {}).get('enabled', False):
+        moderator = create_moderator(config['moderator'])
+        log_print("Moderator enabled for scoring\n")
     
     # Initialize conversation
     topic = config['topic']
@@ -266,12 +355,12 @@ def run_discussion(config_path=None):
     )
     
     messages = [initial_message]
-    print(f"\n{'='*80}")
-    print(f"Topic: {topic}")
-    print(f"Mode: {mode}")
-    print(f"Max turns: {'Unlimited' if max_turns == 0 else max_turns}")
-    print(f"Participants: {', '.join([a['name'] for a in agents])}")
-    print(f"{'='*80}\n")
+    log_print(f"\n{'='*80}")
+    log_print(f"Topic: {topic}")
+    log_print(f"Mode: {mode}")
+    log_print(f"Max turns: {'Unlimited' if max_turns == 0 else max_turns}")
+    log_print(f"Participants: {', '.join([a['name'] for a in agents])}")
+    log_print(f"{'='*80}\n")
     
     last_speaker_idx = None
     solo_rounds = 0
@@ -286,24 +375,24 @@ def run_discussion(config_path=None):
         
         # Check turn limit (0 means unlimited)
         if max_turns > 0 and turn > max_turns:
-            print("\n--- Maximum turns reached ---\n")
+            log_print("\n--- Maximum turns reached ---\n")
             break
         
-        print(f"\n--- Turn {turn} ---\n")
+        log_print(f"\n--- Turn {turn} ---\n")
         
         # Natural mode: ask agents if they want to participate
         if mode == 'natural':
-            print("Checking participation...\n")
+            log_print("Checking participation...\n")
             participation_scores = []
             for agent_data in agents:
                 interest_score = should_participate(agent_data, messages, is_first_turn=(turn == 1))
                 participation_scores.append((agent_data, interest_score))
                 if interest_score > 0:
-                    print(f"  {agent_data['name']}: interest level {interest_score}/10")
+                    log_print(f"  {agent_data['name']}: interest level {interest_score}/10")
                 else:
-                    print(f"  {agent_data['name']}: passing")
+                    log_print(f"  {agent_data['name']}: passing")
             
-            print()
+            log_print()
             
             # Filter to only agents who want to participate (score > 0)
             participants = [agent_data for agent_data, score in participation_scores if score > 0]
@@ -324,7 +413,7 @@ def run_discussion(config_path=None):
             
             # Check termination conditions
             if len(participants) == 0:
-                print("Discussion concluded - no agents wish to continue\n")
+                log_print("Discussion concluded - no agents wish to continue\n")
                 break
             
             # Check if same solo speaker for multiple rounds
@@ -333,7 +422,7 @@ def run_discussion(config_path=None):
                 if last_solo_speaker == current_solo:
                     solo_rounds += 1
                     if solo_rounds >= solo_speaker_limit:
-                        print(f"Discussion concluded - only {current_solo} participated for {solo_speaker_limit} consecutive rounds\n")
+                        log_print(f"Discussion concluded - only {current_solo} participated for {solo_speaker_limit} consecutive rounds\n")
                         break
                 else:
                     solo_rounds = 1
@@ -375,11 +464,11 @@ def run_discussion(config_path=None):
             agent_color = agent_data.get('color')
             
             if agent_color:
-                print(f"{colorize(agent_name + ':', agent_color)}")
+                log_print(f"{colorize(agent_name + ':', agent_color)}")
             else:
-                print(f"{agent_name}:")
+                log_print(f"{agent_name}:")
             
-            print(f"{response.msg.content}\n")
+            log_print(f"{response.msg.content}\n")
             
             last_speaker_idx = agents.index(agent_data)
             agent_last_spoke[agent_data['name']] = turn  # Track when this agent spoke
@@ -390,10 +479,79 @@ def run_discussion(config_path=None):
                 if other_agent_data != agent_data:
                     # Update the other agent's memory with what was just said
                     other_agent_data['agent'].update_memory(response.msg, "assistant")
+        
+        # Moderator scoring at end of round
+        if moderator:
+            log_print("\n--- Moderator Scoring ---\n")
+            
+            for agent_data in agent_order:
+                # Build the scoring prompt with the agent's response
+                scoring_prompt = BaseMessage.make_user_message(
+                    role_name="Moderator",
+                    content=f"""Score the following response from {agent_data['name']} on the topic "{topic}".
+
+Response:
+{messages[-len(agent_order) + agent_order.index(agent_data)].content}
+
+Provide a score adjustment between -5 and +5 based on:
+- Strong arguments and evidence: positive points
+- Going off-topic: negative points
+- Logical fallacies: negative points
+- Personal attacks on other participants: negative points
+
+Reply with ONLY a number between -5 and +5."""
+                )
+                
+                try:
+                    score_response = moderator['agent'].step(scoring_prompt)
+                    score_text = score_response.msg.content.strip()
+                    
+                    # Extract number from response
+                    import re
+                    numbers = re.findall(r'-?\d+', score_text)
+                    if numbers:
+                        score_delta = int(numbers[0])
+                        score_delta = max(-5, min(5, score_delta))  # Clamp to -5 to +5
+                        agent_scores[agent_data['name']] += score_delta
+                        
+                        moderator_color = moderator.get('color')
+                        score_str = f"{agent_data['name']}: {score_delta:+d} (total: {agent_scores[agent_data['name']]})"
+                        
+                        if moderator_color:
+                            log_print(f"  {colorize(score_str, moderator_color)}")
+                        else:
+                            log_print(f"  {score_str}")
+                except Exception as e:
+                    log_print(f"  Error scoring {agent_data['name']}: {e}")
+            
+            log_print()
     
-    print(f"{'='*80}")
-    print(f"Discussion ended after {turn} turns")
-    print(f"{'='*80}\n")
+    log_print(f"{'='*80}")
+    log_print(f"Discussion ended after {turn} turns")
+    log_print(f"{'='*80}\n")
+    
+    # Display final scores if moderator was enabled
+    if moderator:
+        log_print("Final Scores:")
+        sorted_scores = sorted(agent_scores.items(), key=lambda x: x[1], reverse=True)
+        for agent_name, score in sorted_scores:
+            log_print(f"  {agent_name}: {score}")
+        log_print()
+    
+    if log_file:
+        log_file.close()
+        log_path = config.get('logging', {}).get('path', '/app/logs/conversation.txt')
+        print(f"\nConversation logged to: {log_path}")
 
 if __name__ == '__main__':
-    run_discussion()
+    import sys
+    
+    # Check for config file argument
+    config_file = None
+    if len(sys.argv) > 1:
+        config_file = sys.argv[1]
+        # If it's a relative path without /app/configs prefix, add it
+        if not config_file.startswith('/'):
+            config_file = f"/app/configs/{config_file}"
+    
+    run_discussion(config_file)
