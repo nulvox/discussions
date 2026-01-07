@@ -97,8 +97,10 @@ def create_agent(agent_config):
         'model_type': model_config['type'],
         'model_config_dict': {
             'max_tokens': model_config.get('max_tokens', 4096),
-            # Set HTTP timeout - None means unlimited
+            # Set both request timeout and connect timeout
+            # For None (unlimited), use a very large number
             'timeout': timeout if timeout is not None else 999999,
+            'connect_timeout': 30 if timeout is not None else 999999,  # Connection timeout
         }
     }
     
