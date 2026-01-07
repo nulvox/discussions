@@ -73,6 +73,69 @@ def load_config(config_path):
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
+def verify_agent_connection(agent_config):
+    """
+    Verify that the agent's model endpoint is reachable before starting
+    Returns (success: bool, error_message: str or None)
+    """
+    model_config = agent_config['model']
+    platform = model_config['platform']
+    agent_name = agent_config['name']
+    
+    # Only verify endpoints with URLs (Ollama and custom endpoints)
+    if 'url' not in model_config:
+        return True, None
+    
+    url = model_config['url']
+    
+    try:
+        import requests
+        # Try to reach the endpoint with a short timeout
+        # For Ollama, check the /api/tags endpoint
+        if platform == 'ollama':
+            # Extract base URL (remove /v1 suffix if present)
+            base_url = url.replace('/v1', '').rstrip('/')
+            test_url = f"{base_url}/api/tags"
+            response = requests.get(test_url, timeout=5)
+            
+            if response.status_code == 200:
+                return True, None
+            else:
+                return False, f"Ollama endpoint returned status {response.status_code}"
+        else:
+            # For other endpoints, just try a basic connection
+            response = requests.get(url, timeout=5)
+            return True, None
+            
+    except requests.exceptions.ConnectionError:
+        error_msg = f"""
+Unable to connect to {platform} endpoint for agent '{agent_name}'
+URL: {url}
+
+Possible causes:
+"""
+        if platform == 'ollama':
+            error_msg += """  - Ollama service is not running
+    Start it with: ollama serve
+  - Ollama is running on a different port
+    Check with: ollama list
+  - Docker cannot reach host (try your host IP instead of host.docker.internal)
+    Example: http://192.168.1.100:11434/v1
+"""
+        else:
+            error_msg += f"""  - The {platform} service is not running
+  - The URL is incorrect
+  - Firewall is blocking the connection
+"""
+        return False, error_msg
+        
+    except requests.exceptions.Timeout:
+        return False, f"Connection to {platform} endpoint timed out for agent '{agent_name}' at {url}"
+        
+    except Exception as e:
+        return False, f"Error connecting to {platform} endpoint for agent '{agent_name}': {str(e)}"
+
+
 def create_agent(agent_config):
     model_config = agent_config['model']
     platform_map = {
@@ -97,10 +160,8 @@ def create_agent(agent_config):
         'model_type': model_config['type'],
         'model_config_dict': {
             'max_tokens': model_config.get('max_tokens', 4096),
-            # Set both request timeout and connect timeout
-            # For None (unlimited), use a very large number
+            # Set request timeout - for None (unlimited), use a very large number
             'timeout': timeout if timeout is not None else 999999,
-            'connect_timeout': 30 if timeout is not None else 999999,  # Connection timeout
         }
     }
     
@@ -175,6 +236,20 @@ def run_discussion(config_path=None):
         config_path = os.getenv('CONFIG_PATH', '/app/configs/example-simple.yml')
     
     config = load_config(config_path)
+    
+    # Verify all agent connections before starting
+    print("Verifying agent connections...\n")
+    for agent_config in config['agents']:
+        agent_name = agent_config['name']
+        print(f"  Checking {agent_name}...", end=' ')
+        success, error_msg = verify_agent_connection(agent_config)
+        if not success:
+            print("FAILED")
+            print(f"\n{error_msg}")
+            print("\nPlease fix the connection issue and try again.")
+            return
+        print("OK")
+    print()
     
     # Create all agents
     agents = [create_agent(agent_config) for agent_config in config['agents']]
