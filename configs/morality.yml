@@ -1,0 +1,52 @@
+topic: "What is the foundation of morality?"
+max_turns: 0  # Unlimited - let the discussion reach its natural conclusion
+mode: natural
+solo_speaker_rounds_limit: 2
+
+# Enable conversation logging
+logging:
+  enabled: true
+  path: /app/logs/philosophers-discussion.txt
+
+# Enable moderator scoring
+moderator:
+  enabled: true
+  color: bright_yellow
+  system_message_file: "prompts/philosophy-moderator.txt"
+  model:
+    platform: ollama
+    type: gpt-oss:20b
+    url: http://host.docker.internal:11434/v1
+    max_tokens: 4096
+    timeout: null
+
+agents:
+  - name: "Immanuel Kant"
+    color: bright_blue
+    system_message_file: "prompts/kant.txt"
+    model:
+      platform: ollama
+      type: gpt-oss:20b
+      url: http://host.docker.internal:11434/v1
+      max_tokens: 4096
+      timeout: null
+  
+  - name: "John Stuart Mill"
+    color: bright_green
+    system_message_file: "prompts/mill.txt"
+    model:
+      platform: ollama
+      type: gpt-oss:20b
+      url: http://host.docker.internal:11434/v1
+      max_tokens: 4096
+      timeout: null
+  
+  - name: "Friedrich Nietzsche"
+    color: bright_red
+    system_message_file: "prompts/nietzsche.txt"
+    model:
+      platform: ollama
+      type: gpt-oss:20b
+      url: http://host.docker.internal:11434/v1
+      max_tokens: 4096
+      timeout: null

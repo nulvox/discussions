@@ -306,14 +306,14 @@ def run_discussion(config_path=None):
         os.makedirs(log_dir, exist_ok=True)
         log_file = open(log_path, 'w', encoding='utf-8')
         
-        def log_print(message, end='\n'):
+        def log_print(message='', end='\n'):
             """Print to both stdout and log file"""
             print(message, end=end)
             if log_file:
                 log_file.write(message + end)
                 log_file.flush()
     else:
-        def log_print(message, end='\n'):
+        def log_print(message='', end='\n'):
             """Print only to stdout"""
             print(message, end=end)
     
@@ -545,11 +545,36 @@ Reply with ONLY a number between -5 and +5."""
 
 if __name__ == '__main__':
     import sys
+    import argparse
     
-    # Check for config file argument
-    config_file = None
-    if len(sys.argv) > 1:
-        config_file = sys.argv[1]
+    parser = argparse.ArgumentParser(
+        description='Multi-agent discussion platform using Camel-AI',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default config
+  python discussion.py
+  
+  # Use specific config file
+  python discussion.py example-natural.yml
+  python discussion.py /app/configs/my-config.yml
+  
+  # In Docker
+  docker-compose run --rm discussion example-natural.yml
+        """
+    )
+    
+    parser.add_argument(
+        'config',
+        nargs='?',
+        default=None,
+        help='Path to configuration file (default: from CONFIG_PATH env or example-simple.yml)'
+    )
+    
+    args = parser.parse_args()
+    
+    config_file = args.config
+    if config_file:
         # If it's a relative path without /app/configs prefix, add it
         if not config_file.startswith('/'):
             config_file = f"/app/configs/{config_file}"

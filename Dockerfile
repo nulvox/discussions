@@ -7,4 +7,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY discussion.py .
 
-CMD ["python", "discussion.py"]
+ENTRYPOINT ["python", "discussion.py"]
+CMD []
