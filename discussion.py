@@ -370,6 +370,9 @@ def run_discussion(config_path=None):
     # Track when each agent last spoke (turn number)
     agent_last_spoke = {agent['name']: 0 for agent in agents}
     
+    # Track the full discussion history (without system prompts)
+    discussion_history = []
+    
     while True:
         turn += 1
         
@@ -443,12 +446,6 @@ def run_discussion(config_path=None):
             random.shuffle(agent_order)
         
         # Have agents speak
-        # Create a prompt for continuing the discussion
-        discussion_prompt = BaseMessage.make_user_message(
-            role_name="Moderator",
-            content=f"Continue the discussion on: {topic}"
-        )
-        
         for agent_data in agent_order:
             # In random mode, prevent same agent speaking twice in a row
             if mode == 'random' and last_speaker_idx is not None:
@@ -456,9 +453,30 @@ def run_discussion(config_path=None):
                 if current_idx == last_speaker_idx:
                     continue
             
-            # Agent gets full context including what others said earlier this round
+            # Build a combined prompt with the full discussion history
+            # This includes the topic and all previous responses from all agents
+            if len(discussion_history) == 0:
+                # First speaker of the discussion
+                combined_content = f"Continue the discussion on: {topic}"
+            else:
+                # Build the context with who said what
+                context_parts = [f"Discussion topic: {topic}\n"]
+                for hist_speaker, hist_content in discussion_history:
+                    context_parts.append(f"\n{hist_speaker}:\n{hist_content}")
+                context_parts.append(f"\n\nYour turn to respond:")
+                combined_content = "".join(context_parts)
+            
+            discussion_prompt = BaseMessage.make_user_message(
+                role_name="Moderator",
+                content=combined_content
+            )
+            
+            # Agent responds with full context but keeps their own system prompt
             response = agent_data['agent'].step(discussion_prompt)
             messages.append(response.msg)
+            
+            # Add this response to the shared discussion history
+            discussion_history.append((agent_data['name'], response.msg.content))
             
             agent_name = agent_data['name']
             agent_color = agent_data.get('color')
@@ -472,13 +490,6 @@ def run_discussion(config_path=None):
             
             last_speaker_idx = agents.index(agent_data)
             agent_last_spoke[agent_data['name']] = turn  # Track when this agent spoke
-            
-            # After each agent speaks, update ALL other participating agents' context
-            # so they can respond to what was just said
-            for other_agent_data in agent_order:
-                if other_agent_data != agent_data:
-                    # Update the other agent's memory with what was just said
-                    other_agent_data['agent'].update_memory(response.msg, "assistant")
         
         # Moderator scoring at end of round
         if moderator:
