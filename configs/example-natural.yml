@@ -22,6 +22,10 @@ moderator:
 agents:
   - name: "AI Safety Researcher"
     color: bright_red
+    rate_limit:
+      max_retries: 10
+      initial_delay: 2
+      max_delay: 120
     system_message: |
       You are an AI safety researcher focused on alignment and existential risk.
       
@@ -50,6 +54,10 @@ agents:
   
   - name: "Tech Optimist"
     color: bright_green
+    rate_limit:
+      max_retries: 10
+      initial_delay: 2
+      max_delay: 120
     system_message: |
       You are a technology optimist who believes AGI will solve humanity's greatest challenges.
       
@@ -76,6 +84,10 @@ agents:
     color: bright_blue
     # This agent loads its prompt from an external file
     system_message_file: "prompts/philosopher.txt"
+    rate_limit:
+      max_retries: 10
+      initial_delay: 2
+      max_delay: 120
     model:
       platform: ollama
       type: gpt-oss:20b

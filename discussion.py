@@ -4,6 +4,7 @@ import random
 import os
 import logging
 import sys
+import time
 from camel.agents import ChatAgent
 from camel.messages import BaseMessage
 from camel.models import ModelFactory
@@ -68,6 +69,59 @@ def colorize(text, color):
     if color_code:
         return f"{color_code}{text}{reset_code}"
     return text
+
+
+def call_with_rate_limiting(func, agent_name, rate_limit_config=None):
+    """
+    Call a function with exponential backoff on rate limit errors
+    
+    Args:
+        func: Function to call (typically agent.step())
+        agent_name: Name of the agent (for logging)
+        rate_limit_config: Dict with 'max_retries', 'initial_delay', 'max_delay'
+    """
+    if rate_limit_config is None:
+        rate_limit_config = {
+            'max_retries': 5,
+            'initial_delay': 1,
+            'max_delay': 60
+        }
+    
+    max_retries = rate_limit_config.get('max_retries', 5)
+    initial_delay = rate_limit_config.get('initial_delay', 1)
+    max_delay = rate_limit_config.get('max_delay', 60)
+    
+    for attempt in range(max_retries + 1):
+        try:
+            return func()
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # Check if it's a rate limit error
+            is_rate_limit = any(phrase in error_str for phrase in [
+                'rate limit',
+                'rate_limit',
+                'ratelimit',
+                'too many requests',
+                '429',
+                'quota exceeded',
+                'rate exceeded'
+            ])
+            
+            if not is_rate_limit or attempt == max_retries:
+                # Not a rate limit error, or we're out of retries
+                raise
+            
+            # Calculate delay with exponential backoff
+            delay = min(initial_delay * (2 ** attempt), max_delay)
+            
+            print(f"Rate limit hit for {agent_name}. Retrying in {delay}s... (attempt {attempt + 1}/{max_retries})", 
+                  file=sys.stderr)
+            time.sleep(delay)
+    
+    # Should never reach here, but just in case
+    raise Exception(f"Failed after {max_retries} retries")
+
 
 def load_config(config_path):
     with open(config_path, 'r') as f:
@@ -188,6 +242,11 @@ def create_moderator(moderator_config):
     
     return {
         'color': moderator_config.get('color', None),
+        'rate_limit': moderator_config.get('rate_limit', {
+            'max_retries': 5,
+            'initial_delay': 1,
+            'max_delay': 60
+        }),
         'agent': ChatAgent(
             system_message=system_message,
             model=model,
@@ -251,7 +310,12 @@ def create_agent(agent_config):
     
     return {
         'name': agent_config['name'],
-        'color': agent_config.get('color', None),  # Optional color for this agent
+        'color': agent_config.get('color', None),
+        'rate_limit': agent_config.get('rate_limit', {
+            'max_retries': 5,
+            'initial_delay': 1,
+            'max_delay': 60
+        }),
         'agent': ChatAgent(
             system_message=system_message,
             model=model,
@@ -272,7 +336,11 @@ def should_participate(agent_data, messages, is_first_turn=False):
     )
     
     try:
-        response = agent_data['agent'].step(decision_prompt)
+        response = call_with_rate_limiting(
+            lambda: agent_data['agent'].step(decision_prompt),
+            agent_data['name'],
+            agent_data.get('rate_limit')
+        )
         response_text = response.msg.content.strip()
         
         # Extract number from response
@@ -472,7 +540,11 @@ def run_discussion(config_path=None):
             )
             
             # Agent responds with full context but keeps their own system prompt
-            response = agent_data['agent'].step(discussion_prompt)
+            response = call_with_rate_limiting(
+                lambda: agent_data['agent'].step(discussion_prompt),
+                agent_data['name'],
+                agent_data.get('rate_limit')
+            )
             messages.append(response.msg)
             
             # Add this response to the shared discussion history
@@ -514,7 +586,11 @@ Reply with ONLY a number between -5 and +5."""
                 )
                 
                 try:
-                    score_response = moderator['agent'].step(scoring_prompt)
+                    score_response = call_with_rate_limiting(
+                        lambda: moderator['agent'].step(scoring_prompt),
+                        "Moderator",
+                        moderator.get('rate_limit')
+                    )
                     score_text = score_response.msg.content.strip()
                     
                     # Extract number from response

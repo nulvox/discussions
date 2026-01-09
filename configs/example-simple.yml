@@ -12,6 +12,10 @@ moderator:
   enabled: false
   color: bright_yellow
   system_message_file: "prompts/moderator.txt"
+  rate_limit:
+    max_retries: 10
+    initial_delay: 2
+    max_delay: 120
   model:
     platform: ollama
     type: gpt-oss:20b
@@ -35,6 +39,10 @@ agents:
       - Acknowledge counterarguments but emphasize risk
       
       Keep responses focused and concise (2-3 paragraphs max).
+    rate_limit:
+      max_retries: 10
+      initial_delay: 2
+      max_delay: 120
     model:
       platform: anthropic
       type: claude-3-5-sonnet-20241022
@@ -50,6 +58,10 @@ agents:
       advancement and view safety concerns as manageable through iteration.
       
       Keep responses focused and concise (2-3 paragraphs max).
+    rate_limit:
+      max_retries: 10
+      initial_delay: 2
+      max_delay: 120
     model:
       platform: openai
       type: gpt-4
@@ -59,6 +71,10 @@ agents:
   - name: "Pragmatic Engineer"
     color: cyan
     system_message: "You are a pragmatic engineer focused on practical implementation and constraints. You consider both safety and capability from an engineering perspective."
+    rate_limit:
+      max_retries: 10
+      initial_delay: 2
+      max_delay: 120
     model:
       platform: ollama
       type: llama3.1

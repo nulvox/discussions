@@ -110,6 +110,11 @@ agents:
     system_message: "Agent's personality and instructions"
     # OR use external file:
     # system_message_file: "prompts/agent.txt"
+    # Optional: Configure rate limiting with exponential backoff
+    rate_limit:
+      max_retries: 5      # Maximum retry attempts (default: 5)
+      initial_delay: 1    # Initial delay in seconds (default: 1)
+      max_delay: 60       # Maximum delay in seconds (default: 60)
     model:
       platform: provider_name
       type: model_identifier
@@ -307,6 +312,40 @@ agents:
 ```
 
 Colors only work when terminal supports them (automatically detected).
+
+## Rate Limiting
+
+The application handles API rate limits automatically with exponential backoff. Configure per-agent:
+
+```yaml
+agents:
+  - name: "Agent Name"
+    rate_limit:
+      max_retries: 5      # Maximum retry attempts (default: 5)
+      initial_delay: 1    # Initial delay in seconds (default: 1)
+      max_delay: 60       # Maximum delay in seconds (default: 60)
+```
+
+**How it works:**
+- Automatically detects rate limit errors (429, "rate limit exceeded", etc.)
+- Retries with exponential backoff: 1s, 2s, 4s, 8s, 16s...
+- Caps delay at `max_delay` to avoid excessive waiting
+- Shows retry messages: "Rate limit hit for Agent Name. Retrying in 4s..."
+- Throws error if max retries exceeded
+
+**Default behavior** (if not configured):
+- 5 retries with 1s initial delay, 60s max delay
+- Suitable for most commercial APIs
+
+**For heavy usage:**
+```yaml
+rate_limit:
+  max_retries: 10
+  initial_delay: 2
+  max_delay: 120
+```
+
+Rate limiting also applies to moderator scoring if enabled.
 
 ## Using Ollama with Docker
 
